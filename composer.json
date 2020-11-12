@@ -1,5 +1,5 @@
 {
-  "name": "prayno/casauth-bundle",
+  "name": "unicesil/casauth-bundle",
   "type": "symfony-bundle",
   "description": "Basic CAS (SSO) authenticator for Symfony 3, 4 and 5",
   "keywords": ["PRayno", "CAS", "SSO", "Symfony 3", "Guard", "Symfony 4", "Symfony 5"],
@@ -8,6 +8,10 @@
     {
       "name": "Pierre Raynaud",
       "email": "pierre.raynaud@uca.fr"
+    },
+    {
+      "name": "Frédéric Casazza",
+      "email": "frederic.casazza@univ-cotedazur.fr"
     }
   ],
   "require": {
@@ -19,9 +23,9 @@
     "guzzlehttp/guzzle": "^6.2"
   },
   "autoload": {
-    "psr-0": { "PRayno\\CasAuthBundle": "" }
+    "psr-0": { "UniceSIL\\CasAuthBundle": "" }
   },
-  "target-dir": "PRayno/CasAuthBundle",
+  "target-dir": "UniceSIL/CasAuthBundle",
   "extra": {
   }
 }
