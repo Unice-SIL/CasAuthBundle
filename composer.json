@@ -1,8 +1,8 @@
 {
   "name": "prayno/casauth-bundle",
   "type": "symfony-bundle",
-  "description": "Basic CAS (SSO) authenticator for Symfony 3, 4 and 5",
-  "keywords": ["PRayno", "CAS", "SSO", "Symfony 3", "Guard", "Symfony 4", "Symfony 5"],
+  "description": "Basic CAS (SSO) authenticator for Symfony",
+  "keywords": ["PRayno", "CAS", "SSO", "Symfony"],
   "license": "MIT",
   "authors": [
     {
@@ -11,17 +11,20 @@
     }
   ],
   "require": {
-    "symfony/config": "^3.0|^4.0|^5.0",
-    "symfony/dependency-injection": "^3.0|^4.0|^5.0",
-    "symfony/http-foundation": "^3.0|^4.0|^5.0",
-    "symfony/http-kernel": "^3.0|^4.0|^5.0",
-    "symfony/security-bundle": "^3.0|^4.0|^5.0",
-    "guzzlehttp/guzzle": "^6.2"
+    "php": ">=8.2",
+    "symfony/config": "^5.4|^6.0|^7.0",
+    "symfony/dependency-injection": "^5.4|^6.0|^7.0",
+    "symfony/event-dispatcher-contracts": "^2.5|^3.0",
+    "symfony/http-foundation": "^5.4|^6.0|^7.0",
+    "symfony/http-kernel": "^5.4|^6.0|^7.0",
+    "symfony/security-core": "^5.4|^6.0|^7.0",
+    "symfony/security-http": "^5.4|^6.0|^7.0",
+    "symfony/security-bundle": "^5.4|^6.0|^7.0",
+    "guzzlehttp/guzzle": "^7.4"
   },
   "autoload": {
-    "psr-0": { "PRayno\\CasAuthBundle": "" }
+    "psr-4": { "PRayno\\CasAuthBundle\\": "src/" }
   },
-  "target-dir": "PRayno/CasAuthBundle",
   "extra": {
   }
 }

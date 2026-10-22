@@ -15,14 +15,10 @@ class Configuration implements ConfigurationInterface
     /**
      * {@inheritdoc}
      */
-    public function getConfigTreeBuilder()
+    public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder('p_rayno_cas_auth');
-        //fix deprecated call
-        if(\Symfony\Component\HttpKernel\Kernel::VERSION > 4.2)
-            $rootNode = $treeBuilder->getRootNode();
-        else
-            $rootNode = $treeBuilder->root('p_rayno_cas_auth');
+        $rootNode = $treeBuilder->getRootNode();
 
         $rootNode
             ->children()

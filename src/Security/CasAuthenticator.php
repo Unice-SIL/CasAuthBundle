@@ -1,21 +1,26 @@
 <?php
-// src/AppBundle/Security/TokenAuthenticator.php
+
 namespace PRayno\CasAuthBundle\Security;
 
 use GuzzleHttp\Client;
 use PRayno\CasAuthBundle\Event\CASAuthenticationFailureEvent;
 use PRayno\CasAuthBundle\Security\User\CasUserProviderInterface;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\Security\Core\User\UserInterface;
-use Symfony\Component\Security\Guard\AbstractGuardAuthenticator;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
+use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
 use Symfony\Component\Security\Core\User\UserProviderInterface;
+use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
+use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
+use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
+use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPassport;
+use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
-class CasAuthenticator extends AbstractGuardAuthenticator
+class CasAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
 {
     protected $server_login_url;
     protected $server_validation_url;
@@ -25,13 +30,14 @@ class CasAuthenticator extends AbstractGuardAuthenticator
     protected $query_service_parameter;
     protected $options;
 
-    private $eventDispatcher;
+    private UserProviderInterface $userProvider;
+    private EventDispatcherInterface $eventDispatcher;
 
     /**
      * Process configuration
      * @param array $config
      */
-    public function __construct($config, EventDispatcherInterface $eventDispatcher)
+    public function __construct(array $config, UserProviderInterface $userProvider, EventDispatcherInterface $eventDispatcher)
     {
         $this->server_login_url = $config['server_login_url'];
         $this->server_validation_url = $config['server_validation_url'];
@@ -41,6 +47,7 @@ class CasAuthenticator extends AbstractGuardAuthenticator
         $this->query_ticket_parameter = $config['query_ticket_parameter'];
         $this->options = $config['options'];
 
+        $this->userProvider = $userProvider;
         $this->eventDispatcher = $eventDispatcher;
     }
 
@@ -48,20 +55,46 @@ class CasAuthenticator extends AbstractGuardAuthenticator
      * Does the authenticator support the given Request?
      *
      * If this returns false, the authenticator will be skipped.
-     *
-     * @param Request $request
-     *
-     * @return bool
      */
-    public function supports(Request $request)
+    public function supports(Request $request): ?bool
     {
         return (bool) $request->get($this->query_ticket_parameter);
     }
 
     /**
-     * {@inheritdoc}
+     * Validates the CAS ticket and builds the security passport.
      */
-    public function getCredentials(Request $request)
+    public function authenticate(Request $request): Passport
+    {
+        $credentials = $this->getCredentials($request);
+
+        if (!isset($credentials[$this->username_attribute])) {
+            throw new CustomUserMessageAuthenticationException('CAS ticket validation failed.');
+        }
+
+        $username = $credentials[$this->username_attribute];
+        $attributes = isset($credentials['attributes']) ? (array) $credentials['attributes'] : [];
+        $userProvider = $this->userProvider;
+
+        return new SelfValidatingPassport(
+            new UserBadge($username, function (string $identifier) use ($userProvider, $attributes) {
+                if ($userProvider instanceof CasUserProviderInterface) {
+                    return $userProvider->loadUserByUsernameAndAttributes($identifier, $attributes);
+                }
+
+                if (method_exists($userProvider, 'loadUserByIdentifier')) {
+                    return $userProvider->loadUserByIdentifier($identifier);
+                }
+
+                return $userProvider->loadUserByUsername($identifier);
+            })
+        );
+    }
+
+    /**
+     * Validates the CAS ticket against the CAS server and returns the authentication attributes.
+     */
+    private function getCredentials(Request $request): array
     {
         $url = $this->server_validation_url.'?'.$this->query_ticket_parameter.'='.
             $request->get($this->query_ticket_parameter).'&'.
@@ -81,47 +114,9 @@ class CasAuthenticator extends AbstractGuardAuthenticator
     }
 
     /**
-     * Calls the UserProvider providing a valid User
-     * @param array $credentials
-     * @param UserProviderInterface $userProvider
-     * @return UserInterface|null
-     */
-    public function getUser($credentials, UserProviderInterface $userProvider)
-    {
-        if (isset($credentials[$this->username_attribute])) {
-            if($userProvider instanceof CasUserProviderInterface)
-            {
-                $attributes = (isset($credentials['attributes']))? (array)$credentials['attributes'] : [];
-                return $userProvider->loadUserByUsernameAndAttributes($credentials[$this->username_attribute], $attributes);
-            }
-            else
-            {
-                return $userProvider->loadUserByUsername($credentials[$this->username_attribute]);
-            }
-        } else {
-            return null;
-        }
-    }
-
-    /**
      * Mandatory but not in use in a remote authentication
-     * @param $credentials
-     * @param UserInterface $user
-     * @return bool
      */
-    public function checkCredentials($credentials, UserInterface $user)
-    {
-        return true;
-    }
-
-    /**
-     * Mandatory but not in use in a remote authentication
-     * @param Request $request
-     * @param TokenInterface $token
-     * @param $providerKey
-     * @return null
-     */
-    public function onAuthenticationSuccess(Request $request, TokenInterface $token, $providerKey)
+    public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response
     {
         // If authentication was successful, redirect to the current URI with
         // the ticket parameter removed so that it is hidden from end-users.
@@ -133,20 +128,17 @@ class CasAuthenticator extends AbstractGuardAuthenticator
     }
 
     /**
-     * Mandatory but not in use in a remote authentication
-     * @param Request $request
-     * @param AuthenticationException $exception
      * @return JsonResponse
      */
-    public function onAuthenticationFailure(Request $request, AuthenticationException $exception)
+    public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
         $data = array(
             'message' => strtr($exception->getMessageKey(), $exception->getMessageData())
         );
         $def_response = new JsonResponse($data, 403);
 
-        $event = new CASAuthenticationFailureEvent($request,$exception, $def_response);
-        $this->eventDispatcher->dispatch(CASAuthenticationFailureEvent::POST_MESSAGE, $event);
+        $event = new CASAuthenticationFailureEvent($request, $exception, $def_response);
+        $this->eventDispatcher->dispatch($event, CASAuthenticationFailureEvent::POST_MESSAGE);
 
         return $event->getResponse();
     }
@@ -154,18 +146,9 @@ class CasAuthenticator extends AbstractGuardAuthenticator
     /**
      * Called when authentication is needed, redirect to your CAS server authentication form
      */
-    public function start(Request $request, AuthenticationException $authException = null)
+    public function start(Request $request, AuthenticationException $authException = null): Response
     {
         return new RedirectResponse($this->server_login_url.'?'.$this->query_service_parameter.'='.urlencode($request->getUri()));
-    }
-
-    /**
-     * Mandatory but not in use in a remote authentication
-     * @return bool
-     */
-    public function supportsRememberMe()
-    {
-        return false;
     }
 
     /**
