@@ -3,6 +3,7 @@
 namespace PRayno\CasAuthBundle\Security;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use PRayno\CasAuthBundle\Event\CASAuthenticationFailureEvent;
 use PRayno\CasAuthBundle\Security\User\CasUserProviderInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -32,12 +33,13 @@ class CasAuthenticator extends AbstractAuthenticator implements AuthenticationEn
 
     private UserProviderInterface $userProvider;
     private EventDispatcherInterface $eventDispatcher;
+    private ClientInterface $httpClient;
 
     /**
      * Process configuration
      * @param array $config
      */
-    public function __construct(array $config, UserProviderInterface $userProvider, EventDispatcherInterface $eventDispatcher)
+    public function __construct(array $config, UserProviderInterface $userProvider, EventDispatcherInterface $eventDispatcher, ?ClientInterface $httpClient = null)
     {
         $this->server_login_url = $config['server_login_url'];
         $this->server_validation_url = $config['server_validation_url'];
@@ -49,6 +51,7 @@ class CasAuthenticator extends AbstractAuthenticator implements AuthenticationEn
 
         $this->userProvider = $userProvider;
         $this->eventDispatcher = $eventDispatcher;
+        $this->httpClient = $httpClient ?? new Client();
     }
 
     /**
@@ -100,8 +103,7 @@ class CasAuthenticator extends AbstractAuthenticator implements AuthenticationEn
             $request->get($this->query_ticket_parameter).'&'.
             $this->query_service_parameter.'='.urlencode($this->removeCasTicket($request->getUri()));
 
-        $client = new Client();
-        $response = $client->request('GET', $url, $this->options);
+        $response = $this->httpClient->request('GET', $url, $this->options);
 
         $string = $response->getBody()->getContents();
 
